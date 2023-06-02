@@ -336,65 +336,83 @@ class DepthToDepthCompletion(object):
                     raise
                 pass
 
+        print('before')
+
         # Save Input Image
         input_image_filename = '{:09d}'.format(files_prefix) + self.FOLDER_MAP['input-image']['postfix']
         input_image_filename = os.path.join(input_image_dir, input_image_filename)
         imageio.imwrite(input_image_filename, self.input_image)
+
+        print('input img')
 
         # Save Ground Truth depth and point cloud.
         gt_depth_filename = '{:09d}'.format(files_prefix) + self.FOLDER_MAP['gt-depth']['postfix']
         gt_depth_filename = os.path.join(gt_depth_dir, gt_depth_filename)
         utils.exr_saver(gt_depth_filename, self.depth_gt, ndim=3)
 
-        gt_ptcloud_filename = ('{:09d}'.format(files_prefix) + self.FOLDER_MAP['gt-point-cloud']['postfix'])
-        gt_ptcloud_filename = os.path.join(gt_ptcloud_dir, gt_ptcloud_filename)
-        xyz_points, rgb_points = utils._get_point_cloud(self.input_image, self.depth_gt, self.fx, self.fy, self.cx,
-                                                        self.cy)
-        self.estimate_normals_write_ptcloud(gt_ptcloud_filename, xyz_points, self.outputImgHeight, self.outputImgWidth)
+        print('pc1')
+
+        #gt_ptcloud_filename = ('{:09d}'.format(files_prefix) + self.FOLDER_MAP['gt-point-cloud']['postfix'])
+        #gt_ptcloud_filename = os.path.join(gt_ptcloud_dir, gt_ptcloud_filename)
+        #xyz_points, rgb_points = utils._get_point_cloud(self.input_image, self.depth_gt, self.fx, self.fy, self.cx,
+        #                                                self.cy)
+        #self.estimate_normals_write_ptcloud(gt_ptcloud_filename, xyz_points, self.outputImgHeight, self.outputImgWidth)
+
+        print('pc2')
 
         # Save Orig input depth and point cloud
-        input_depth_filename = '{:09d}'.format(files_prefix) + self.FOLDER_MAP['orig-input-depth']['postfix']
-        input_depth_filename = os.path.join(orig_input_depth_dir, input_depth_filename)
-        utils.exr_saver(input_depth_filename, self.orig_input_depth, ndim=3)
+        #input_depth_filename = '{:09d}'.format(files_prefix) + self.FOLDER_MAP['orig-input-depth']['postfix']
+        #input_depth_filename = os.path.join(orig_input_depth_dir, input_depth_filename)
+        #utils.exr_saver(input_depth_filename, self.orig_input_depth, ndim=3)
 
-        input_ptcloud_filename = ('{:09d}'.format(files_prefix) + self.FOLDER_MAP['orig-input-point-cloud']['postfix'])
-        input_ptcloud_filename = os.path.join(orig_input_ptcloud_dir, input_ptcloud_filename)
+        print('depth')
+
+        #input_ptcloud_filename = ('{:09d}'.format(files_prefix) + self.FOLDER_MAP['orig-input-point-cloud']['postfix'])
+        #input_ptcloud_filename = os.path.join(orig_input_ptcloud_dir, input_ptcloud_filename)
         # utils.write_point_cloud(input_ptcloud_filename, self.input_image, self.orig_input_depth, self.fx, self.fy,
         #                         self.cx, self.cy)
-        xyz_points, rgb_points = utils._get_point_cloud(self.input_image, self.orig_input_depth, self.fx, self.fy,
-                                                        self.cx, self.cy)
-        self.estimate_normals_write_ptcloud(input_ptcloud_filename, xyz_points, self.outputImgHeight,
-                                            self.outputImgWidth)
+        #xyz_points, rgb_points = utils._get_point_cloud(self.input_image, self.orig_input_depth, self.fx, self.fy,
+        #                                                self.cx, self.cy)
+        #self.estimate_normals_write_ptcloud(input_ptcloud_filename, xyz_points, self.outputImgHeight,
+        #                                    self.outputImgWidth)
+        
+        print('pointcloud')
 
         # Save input depth and point cloud
         input_depth_filename = '{:09d}'.format(files_prefix) + self.FOLDER_MAP['input-depth']['postfix']
         input_depth_filename = os.path.join(input_depth_dir, input_depth_filename)
         utils.exr_saver(input_depth_filename, self.input_depth, ndim=3)
 
-        input_ptcloud_filename = ('{:09d}'.format(files_prefix) + self.FOLDER_MAP['input-point-cloud']['postfix'])
-        input_ptcloud_filename = os.path.join(input_ptcloud_dir, input_ptcloud_filename)
-        utils.write_point_cloud(input_ptcloud_filename, self.input_image, self.input_depth, self.fx, self.fy, self.cx,
-                                self.cy)
+        #input_ptcloud_filename = ('{:09d}'.format(files_prefix) + self.FOLDER_MAP['input-point-cloud']['postfix'])
+        #input_ptcloud_filename = os.path.join(input_ptcloud_dir, input_ptcloud_filename)
+        #utils.write_point_cloud(input_ptcloud_filename, self.input_image, self.input_depth, self.fx, self.fy, self.cx,
+        #                        self.cy)
+        
+        print('input')
 
         # Save output depth and point cloud
         output_depth_filename = '{:09d}'.format(files_prefix) + self.FOLDER_MAP['output-depth']['postfix']
         output_depth_filename = os.path.join(output_depth_dir, output_depth_filename)
         utils.exr_saver(output_depth_filename, self.output_depth, ndim=3)
 
-        output_ptcloud_filename = ('{:09d}'.format(files_prefix) + self.FOLDER_MAP['output-point-cloud']['postfix'])
-        output_ptcloud_filename = os.path.join(output_ptcloud_dir, output_ptcloud_filename)
-        utils.write_point_cloud(output_ptcloud_filename, self.surface_normals_rgb, self.output_depth, self.fx, self.fy,
-                                self.cx, self.cy)
+        #output_ptcloud_filename = ('{:09d}'.format(files_prefix) + self.FOLDER_MAP['output-point-cloud']['postfix'])
+        #output_ptcloud_filename = os.path.join(output_ptcloud_dir, output_ptcloud_filename)
+        #utils.write_point_cloud(output_ptcloud_filename, self.surface_normals_rgb, self.output_depth, self.fx, self.fy,
+        #                        self.cx, self.cy)
+        
+        print('output')
 
         # Store Masks
         mask_filename = '{:09d}'.format(files_prefix) + self.FOLDER_MAP['masks']['postfix']
         mask_filename = os.path.join(masks_dir, mask_filename)
         imageio.imwrite(mask_filename, self.mask_predicted)
 
+        print(type(self.mask_predicted))
+
         # Store Normals
         normal_filename = '{:09d}'.format(files_prefix) + self.FOLDER_MAP['normals']['postfix']
         normal_filename = os.path.join(normals_dir, normal_filename)
-        imageio.imwrite(normal_filename, self.surface_normals_rgb)
+        imageio.imwrite(normal_filename, cv2.resize(self.surface_normals_rgb, (0,0), fx=2.0, fy=2.0))
 
         # Store Outlines
         outline_filename = '{:09d}'.format(files_prefix) + self.FOLDER_MAP['outlines']['postfix']

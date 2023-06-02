@@ -196,7 +196,10 @@ if __name__ == '__main__':
         depth_gt[np.isnan(depth_gt)] = 0
         depth_gt[np.isinf(depth_gt)] = 0
         mask_valid_region = (depth_gt > 0)
-        mask_valid_region = np.logical_and(mask_valid_region, seg_mask)
+        if len(seg_mask.shape) == 3:
+            mask_valid_region = np.logical_and(mask_valid_region, seg_mask[:,:,0])
+        else:
+            mask_valid_region = np.logical_and(mask_valid_region, seg_mask)
         mask_valid_region = (mask_valid_region.astype(np.uint8) * 255)
 
         metrics = depthcomplete.compute_errors(depth_gt, output_depth, mask_valid_region)
@@ -209,6 +212,8 @@ if __name__ == '__main__':
         print('{:>15}:'.format('a1.10'), metrics['a2'])
         print('{:>15}:'.format('a1.25'), metrics['a3'])
 
+        print('WHAT')
+
         # Write the data into a csv file
         with open(os.path.join(results_dir, csv_filename), 'a', newline='') as csvfile:
             writer = csv.DictWriter(csvfile, fieldnames=field_names, delimiter=',')
@@ -216,6 +221,8 @@ if __name__ == '__main__':
                 i, metrics["rmse"], metrics["abs_rel"], metrics["mae"], metrics["a1"], metrics["a2"], metrics["a3"]
             ]
             writer.writerow(dict(zip(field_names, row_data)))
+
+        print('HERE')
 
         a1_mean += metrics['a1']
         a2_mean += metrics['a2']
@@ -231,6 +238,8 @@ if __name__ == '__main__':
             files_prefix=i,
             min_depth=config.depthVisualization.minDepth,
             max_depth=config.depthVisualization.maxDepth)
+        
+        print('this?')
         # print('    Mean Absolute Error in output depth (if Synthetic Data)   = {:.4f} cm'.format(error_output_depth))
         # print('    Mean Absolute Error in filtered depth (if Synthetic Data) = {:.4f} cm'.format(error_filtered_output_depth))
 
