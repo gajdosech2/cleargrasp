@@ -37,7 +37,7 @@ args = parser.parse_args()
 
 CONFIG_FILE_PATH = args.configFile
 with open(CONFIG_FILE_PATH) as fd:
-    config_yaml = oyaml.load(fd)  # Returns an ordered dict. Used for printing
+    config_yaml = oyaml.load(fd, Loader=oyaml.FullLoader)  # Returns an ordered dict. Used for printing
 
 config = AttrDict(config_yaml)
 # print(colored('Config being used for training:\n{}\n\n'.format(oyaml.dump(config_yaml)), 'green'))

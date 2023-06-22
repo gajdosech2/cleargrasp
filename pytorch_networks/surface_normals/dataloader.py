@@ -6,6 +6,10 @@ import sys
 from PIL import Image
 import Imath
 import numpy as np
+import glob
+import OpenEXR
+import Imath
+import array
 
 import torch
 import torch.nn as nn
@@ -17,6 +21,84 @@ import imageio
 
 from utils.utils import exr_loader
 
+from dataclasses import dataclass
+from typing import Optional, Tuple
+
+@dataclass
+class Sample:
+    color: Optional[np.ndarray] = None
+    depth: Optional[np.ndarray] = None
+    point_cloud: Optional[np.ndarray] = None
+    mat_id: Optional[np.ndarray] = None
+    object_id: Optional[np.ndarray] = None
+    shading_normal: Optional[np.ndarray] = None
+    path: Optional[str] = None
+    original_shape: Optional[Tuple[int, int]] = None
+
+MAX_VALUE = 65504
+
+class SurfaceNormalsPhoXiEXRDataset(Dataset):
+    def __init__(
+            self,
+            input_dir,
+            label_dir='',
+            mask_dir='',
+            transform=None,
+            input_only=None,
+    ):
+        super().__init__()
+        self.subsample_skip = 4
+        self.paths = self._create_lists_filenames(input_dir)
+
+
+    def _create_lists_filenames(self, path):
+        paths = glob.glob(path + '/**/*.exr')
+        return paths 
+     
+
+    def __len__(self):
+        return len(self.paths)
+    
+    
+    def load_exr(self, exr_path):
+        exr = OpenEXR.InputFile(exr_path)
+        dw = exr.header()['dataWindow']
+        print(exr.header())
+        size = ( dw.max.y - dw.min.y + 1, dw.max.x - dw.min.x + 1)
+        FLOAT = Imath.PixelType(Imath.PixelType.FLOAT)
+        (X, Y, Z, R, G, B, D, M, O) = [np.array(array.array('f', exr.channel(Chan, FLOAT)).tolist()).reshape(size) 
+                     for Chan in ("POSITION.X", "POSITION.Y", "POSITION.Z", "Color.R", "Color.G", "Color.B", "Depth.V", "MATERIAL_ID.V", "OBJECT_ID.V")]
+        #xyz = np.array([X, Y, Z])
+        xyz = np.array([X, Y, Z, np.ones(size)])
+        xyz = np.reshape(xyz, [4, -1])
+        scale = np.eye(4) * 1000
+        scale[3, 3] = 1
+        xyz = scale @ xyz
+        xyz = np.reshape(xyz, [4, size[0], size[1]])
+        xyz = xyz[:3,:,:]
+        xyz = np.transpose(xyz, [1, 2, 0])
+        rgb = np.array([R, G, B])
+        rgb = np.transpose(rgb, [1, 2, 0])
+
+        rgb[rgb >= 1.0] = 1.0
+        xyz[xyz >= MAX_VALUE] = 0
+        O[O >= MAX_VALUE] = 0
+        M[M >= MAX_VALUE] = 0
+        return xyz, rgb, D, M, O
+    
+    
+    def __getitem__(self, index):
+        xyz, rgb, depth, mat_id, obj_id = self.load_exr(self.paths[index])
+
+        _img_tensor = transforms.ToTensor()(rgb)
+        _label_tensor = torch.from_numpy(depth)
+        _mask_tensor = torch.ones((1, _img_tensor.shape[1], _img_tensor.shape[2]), dtype=torch.float32)
+
+        return _img_tensor, _label_tensor, _mask_tensor
+    
+
+    def _activator_masks(self, images, augmenter, parents, default):
+        return False
 
 class SurfaceNormalsDataset(Dataset):
     """
@@ -221,28 +303,38 @@ if __name__ == '__main__':
     #     iaa.Scale((imsize, imsize), 0),
     # ])
 
-    augs = None  # augs_train
-    input_only = None  # ["gaus-blur", "grayscale", "gaus-noise", "brightness", "contrast", "hue-sat", "color-jitter"]
+    # augs = None  # augs_train
+    # input_only = None  # ["gaus-blur", "grayscale", "gaus-noise", "brightness", "contrast", "hue-sat", "color-jitter"]
 
-    db_test = SurfaceNormalsDataset(input_dir='data/datasets/milk-bottles/resized-files/preprocessed-rgb-imgs',
-                                    label_dir='data/datasets/milk-bottles/resized-files/preprocessed-camera-normals',
-                                    transform=augs,
-                                    input_only=input_only)
+    # db_test = SurfaceNormalsDataset(input_dir='data/datasets/milk-bottles/resized-files/preprocessed-rgb-imgs',
+    #                                 label_dir='data/datasets/milk-bottles/resized-files/preprocessed-camera-normals',
+    #                                 transform=augs,
+    #                                 input_only=input_only)
 
-    batch_size = 16
-    testloader = DataLoader(db_test, batch_size=batch_size, shuffle=True, num_workers=32, drop_last=True)
+    # batch_size = 16
+    # testloader = DataLoader(db_test, batch_size=batch_size, shuffle=True, num_workers=32, drop_last=True)
 
-    # Show 1 Shuffled Batch of Images
-    for ii, batch in enumerate(testloader):
-        # Get Batch
-        img, label = batch
-        print('image shape, type: ', img.shape, img.dtype)
-        print('label shape, type: ', label.shape, label.dtype)
+    # # Show 1 Shuffled Batch of Images
+    # for ii, batch in enumerate(testloader):
+    #     # Get Batch
+    #     img, label = batch
+    #     print('image shape, type: ', img.shape, img.dtype)
+    #     print('label shape, type: ', label.shape, label.dtype)
 
-        # Show Batch
-        sample = torch.cat((img, label), 2)
-        im_vis = torchvision.utils.make_grid(sample, nrow=batch_size // 4, padding=2, normalize=True, scale_each=True)
-        plt.imshow(im_vis.numpy().transpose(1, 2, 0))
-        plt.show()
+    #     # Show Batch
+    #     sample = torch.cat((img, label), 2)
+    #     im_vis = torchvision.utils.make_grid(sample, nrow=batch_size // 4, padding=2, normalize=True, scale_each=True)
+    #     plt.imshow(im_vis.numpy().transpose(1, 2, 0))
+    #     plt.show()
 
-        break
+    #     break
+
+    data_path = "data"
+    dataset = SurfaceNormalsPhoXiEXRDataset(data_path)
+    sample = dataset[0]
+
+    print(np.unique(sample.object_id))
+    print(np.amax(sample.object_id))
+    plt.imshow(sample.object_id)
+    plt.show()
+
