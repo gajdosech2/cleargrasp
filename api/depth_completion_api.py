@@ -367,10 +367,14 @@ class DepthToDepthCompletion(object):
 
         print('depth')
 
-        #input_ptcloud_filename = ('{:09d}'.format(files_prefix) + self.FOLDER_MAP['orig-input-point-cloud']['postfix'])
-        #input_ptcloud_filename = os.path.join(orig_input_ptcloud_dir, input_ptcloud_filename)
-        # utils.write_point_cloud(input_ptcloud_filename, self.input_image, self.orig_input_depth, self.fx, self.fy,
-        #                         self.cx, self.cy)
+        input_ptcloud_filename = ('{:09d}'.format(files_prefix) + self.FOLDER_MAP['orig-input-point-cloud']['postfix'])
+        input_ptcloud_filename = os.path.join(orig_input_ptcloud_dir, input_ptcloud_filename)
+        print(self.fx)
+        print(self.fy)
+        print(self.cx)
+        print(self.cy)
+        utils.write_point_cloud(input_ptcloud_filename, self.input_image, self.orig_input_depth, self.fx, self.fy,
+                                 self.cx, self.cy)
         #xyz_points, rgb_points = utils._get_point_cloud(self.input_image, self.orig_input_depth, self.fx, self.fy,
         #                                                self.cx, self.cy)
         #self.estimate_normals_write_ptcloud(input_ptcloud_filename, xyz_points, self.outputImgHeight,
@@ -395,10 +399,10 @@ class DepthToDepthCompletion(object):
         output_depth_filename = os.path.join(output_depth_dir, output_depth_filename)
         utils.exr_saver(output_depth_filename, self.output_depth, ndim=3)
 
-        #output_ptcloud_filename = ('{:09d}'.format(files_prefix) + self.FOLDER_MAP['output-point-cloud']['postfix'])
-        #output_ptcloud_filename = os.path.join(output_ptcloud_dir, output_ptcloud_filename)
-        #utils.write_point_cloud(output_ptcloud_filename, self.surface_normals_rgb, self.output_depth, self.fx, self.fy,
-        #                        self.cx, self.cy)
+        output_ptcloud_filename = ('{:09d}'.format(files_prefix) + self.FOLDER_MAP['output-point-cloud']['postfix'])
+        output_ptcloud_filename = os.path.join(output_ptcloud_dir, output_ptcloud_filename)
+        utils.write_point_cloud(output_ptcloud_filename, self.surface_normals_rgb, self.output_depth, self.fx, self.fy,
+                                self.cx, self.cy)
         
         print('output')
 
@@ -406,8 +410,6 @@ class DepthToDepthCompletion(object):
         mask_filename = '{:09d}'.format(files_prefix) + self.FOLDER_MAP['masks']['postfix']
         mask_filename = os.path.join(masks_dir, mask_filename)
         imageio.imwrite(mask_filename, self.mask_predicted)
-
-        print(type(self.mask_predicted))
 
         # Store Normals
         normal_filename = '{:09d}'.format(files_prefix) + self.FOLDER_MAP['normals']['postfix']

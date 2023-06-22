@@ -314,6 +314,8 @@ def write_point_cloud(filename, color_image, depth_image, fx, fy, cx, cy):
         cx (int): The center of the image (along x-axis, pixels) as per camera used to capture image.
         cy (int): The center of the image (along y-axis, pixels) as per camera used to capture image.
     """
+
+    print(depth_image.shape)
     xyz_points, rgb_points = _get_point_cloud(color_image, depth_image, fx, fy, cx, cy)
 
     # Write header of .ply file

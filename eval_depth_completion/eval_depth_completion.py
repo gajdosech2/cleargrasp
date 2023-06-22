@@ -107,8 +107,8 @@ if __name__ == '__main__':
     gt_depth_file_list = []
     for dataset in config.files:
         EXT_COLOR_IMG = ['-transparent-rgb-img.jpg', '-rgb.jpg']  #'-rgb.jpg' - includes normals-rgb.jpg
-        EXT_DEPTH_IMG = ['-depth-rectified.exr', '-transparent-depth-img.exr']
-        EXT_DEPTH_GT = ['-depth-rectified.exr', '-opaque-depth-img.exr']
+        EXT_DEPTH_IMG = ['-depth-rectified.exr', '-transparent-depth-img.exr', '-transparent-depth-img.tif']
+        EXT_DEPTH_GT = ['-depth-rectified.exr', '-opaque-depth-img.exr', '-opaque-depth-img.tif']
         EXT_MASK = ['-mask.png']
         for ext in EXT_COLOR_IMG:
             rgb_file_list += (sorted(glob.glob(os.path.join(dataset.image, '*' + ext))))
@@ -156,7 +156,13 @@ if __name__ == '__main__':
 
         # Run Depth Completion
         color_img = imageio.imread(rgb_file_list[i])
-        input_depth = api_utils.exr_loader(depth_file_list[i], ndim=1)
+
+        if depth_file_list[i][-3:] == 'tif':
+            print('tif')
+            input_depth = cv2.imread(depth_file_list[i], flags=(cv2.IMREAD_GRAYSCALE | cv2.IMREAD_ANYDEPTH))
+            input_depth /= 1000.0
+        else:
+            input_depth = api_utils.exr_loader(depth_file_list[i], ndim=1)
 
         # NOTE: If no gt_depth present, it means the depth itself is gt_depth (syn data). We mask out all objects in input depth so depthcomplete can't cheat.
         if len(gt_depth_file_list) == 0 and len(segmentation_masks_list) > 0:
@@ -188,9 +194,17 @@ if __name__ == '__main__':
 
         # If Ground Truth depth folder is given, use that to compute errors. In case of Synthetic data, input depth is GT depth.
         if gt_depth_file_list:
-            depth_gt = api_utils.exr_loader(gt_depth_file_list[i], ndim=1)
+            if gt_depth_file_list[i][-3:] == 'tif': 
+                depth_gt = cv2.imread(gt_depth_file_list[i], flags=(cv2.IMREAD_GRAYSCALE | cv2.IMREAD_ANYDEPTH))
+                depth_gt /= 1000.0
+            else:
+                depth_gt = api_utils.exr_loader(gt_depth_file_list[i], ndim=1)
         else:
-            depth_gt = api_utils.exr_loader(depth_file_list[i], ndim=1)
+            if depth_file_list[i][-3:] == 'tif': 
+                depth_gt = cv2.imread(depth_file_list[i], flags=(cv2.IMREAD_GRAYSCALE | cv2.IMREAD_ANYDEPTH))
+                depth_gt /= 1000.0
+            else:
+                depth_gt = api_utils.exr_loader(depth_file_list[i], ndim=1)
 
         depth_gt = cv2.resize(depth_gt, (outputImgWidth, outputImgHeight), interpolation=cv2.INTER_NEAREST)
         depth_gt[np.isnan(depth_gt)] = 0
@@ -212,8 +226,6 @@ if __name__ == '__main__':
         print('{:>15}:'.format('a1.10'), metrics['a2'])
         print('{:>15}:'.format('a1.25'), metrics['a3'])
 
-        print('WHAT')
-
         # Write the data into a csv file
         with open(os.path.join(results_dir, csv_filename), 'a', newline='') as csvfile:
             writer = csv.DictWriter(csvfile, fieldnames=field_names, delimiter=',')
@@ -221,8 +233,6 @@ if __name__ == '__main__':
                 i, metrics["rmse"], metrics["abs_rel"], metrics["mae"], metrics["a1"], metrics["a2"], metrics["a3"]
             ]
             writer.writerow(dict(zip(field_names, row_data)))
-
-        print('HERE')
 
         a1_mean += metrics['a1']
         a2_mean += metrics['a2']
@@ -239,7 +249,6 @@ if __name__ == '__main__':
             min_depth=config.depthVisualization.minDepth,
             max_depth=config.depthVisualization.maxDepth)
         
-        print('this?')
         # print('    Mean Absolute Error in output depth (if Synthetic Data)   = {:.4f} cm'.format(error_output_depth))
         # print('    Mean Absolute Error in filtered depth (if Synthetic Data) = {:.4f} cm'.format(error_filtered_output_depth))
 
