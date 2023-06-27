@@ -122,7 +122,7 @@ if config.eval.datasetsReal is not None:
         if dataset.images:
             db = dataloader.SurfaceNormalsDataset(input_dir=dataset.images,
                                                   label_dir=dataset.labels,
-                                                  mask_dir=dataset.masks,
+                                                  mask_dir="",
                                                   transform=augs_test,
                                                   input_only=None)
             db_test_list_real.append(db)
