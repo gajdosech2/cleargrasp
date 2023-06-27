@@ -330,7 +330,7 @@ if config.train.continueTraining:
 
 # Enable Multi-GPU training
 print("Let's use", torch.cuda.device_count(), "GPUs!")
-model = nn.DataParallel(model)
+#model = nn.DataParallel(model)
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model = model.to(device)
@@ -409,6 +409,25 @@ if (config.train.continueTraining and config.train.loadEpochNumberFromCheckpoint
             colored(
                 'Could not load epoch and total iter nums from checkpoint, they do not exist in checkpoint.\
                        Starting from epoch num 0', 'red'))
+        
+
+filename = os.path.join(CHECKPOINT_DIR, 'checkpoint-epoch-{:04d}.pth'.format(999))
+if torch.cuda.device_count() > 1:
+    model_params = model.module.state_dict()  # Saving nn.DataParallel model
+else:
+    model_params = model.state_dict()
+
+torch.save(
+            {
+                'model_state_dict': model_params,
+                'optimizer_state_dict': optimizer.state_dict(),
+                'epoch': 999,
+                'total_iter_num': total_iter_num,
+                'epoch_loss': 1,
+                'config': config_yaml
+            }, filename)
+
+print('saved zero')
 
 for epoch in range(START_EPOCH, END_EPOCH):
     print('\n\nEpoch {}/{}'.format(epoch, END_EPOCH - 1))

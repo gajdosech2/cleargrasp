@@ -109,7 +109,7 @@ if config.eval.datasetsSynthetic is not None:
         if dataset.images:
             db = dataloader.SurfaceNormalsDataset(input_dir=dataset.images,
                                                   label_dir=dataset.labels,
-                                                  mask_dir=dataset.masks,
+                                                  mask_dir="",
                                                   transform=augs_test,
                                                   input_only=None)
             db_test_list_synthetic.append(db)
@@ -180,7 +180,41 @@ elif config.eval.model == 'drn':
     model = deeplab.DeepLab(num_classes=config.eval.numClasses, backbone='drn', sync_bn=True,
                             freeze_bn=False)
 
-model.load_state_dict(CHECKPOINT['model_state_dict'])
+if 'model_state_dict' in CHECKPOINT:
+    print('first')
+    # Newer checkpoints have multiple dicts within
+    # checkpoint['model_state_dict'].pop('decoder.last_conv.8.weight')
+    # checkpoint['model_state_dict'].pop('decoder.last_conv.8.bias')
+    model.load_state_dict(CHECKPOINT['model_state_dict'], strict=False)
+elif 'state_dict' in CHECKPOINT:
+    print('second')
+    CHECKPOINT['state_dict'].pop('decoder.last_conv.8.weight')
+    CHECKPOINT['state_dict'].pop('decoder.last_conv.8.bias')
+    model.load_state_dict(CHECKPOINT['state_dict'], strict=False)
+else:
+    print('third')
+    model.load_state_dict(CHECKPOINT)
+
+
+#filename = os.path.join('', 'checkpoint-epoch-{:04d}.pth'.format(999))
+#if torch.cuda.device_count() > 1:
+#    model_params = model.module.state_dict()  # Saving nn.DataParallel model
+#else:
+#    model_params = model.state_dict()
+
+#torch.save(
+#            {
+#                'model_state_dict': model_params,
+#                'optimizer_state_dict': '',
+#                'epoch': 999,
+#                'total_iter_num': 100,
+#                'epoch_loss': 1,
+#                'config': config_yaml
+#            }, filename)
+
+#print('saved')
+
+#model.load_state_dict(CHECKPOINT['model_state_dict'])
 
 # Enable Multi-GPU training
 if torch.cuda.device_count() > 1:
@@ -296,7 +330,9 @@ for key in dataloaders_dict:
             output_rgb = utils.normal_to_rgb(output.numpy().transpose((1, 2, 0)))
             output_rgb *= 255
             output_rgb = output_rgb.astype(np.uint8)
-            output_rgb = cv2.resize(output_rgb, (512, 288), interpolation=cv2.INTER_LINEAR)
+
+            #config.eval.imgHeight,
+            #output_rgb = cv2.resize(output_rgb, (512, 288), interpolation=cv2.INTER_LINEAR)
             output_path_rgb = os.path.join(results_dir, SUBDIR_NORMALS,
                                            '{:09d}-normals.png'.format(ii * config.eval.batchSize + iii))
             output_path_exr = os.path.join(results_dir, SUBDIR_NORMALS,
