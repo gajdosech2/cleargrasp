@@ -5,9 +5,13 @@ import os
 import glob
 from PIL import Image
 import Imath
+import glob
+import OpenEXR
+import array
 import numpy as np
 import imageio
 import sys
+import cv2
 
 import torch
 from torch.utils.data import Dataset
@@ -18,6 +22,81 @@ import imgaug as ia
 from utils import utils
 sys.path.append('../..')
 import api.utils as api_utils
+
+
+MAX_VALUE = 65504
+
+class MasksPhoXiEXRDataset(Dataset):
+    def __init__(
+            self,
+            input_dir,
+            label_dir='',
+            transform=None,
+            input_only=None,
+    ):
+        super().__init__()
+        self.subsample_skip = 4
+        self.paths = self._create_lists_filenames(input_dir)
+
+
+    def _create_lists_filenames(self, path):
+        paths = glob.glob(path + '/**/*.exr')
+        print(paths)
+        return paths 
+     
+
+    def __len__(self):
+        return len(self.paths)
+    
+    
+    def load_exr(self, exr_path):
+        exr = OpenEXR.InputFile(exr_path)
+        dw = exr.header()['dataWindow']
+        #print(exr.header())
+        size = ( dw.max.y - dw.min.y + 1, dw.max.x - dw.min.x + 1)
+        FLOAT = Imath.PixelType(Imath.PixelType.FLOAT)
+        (M, R, G, B) = [np.array(array.array('f', exr.channel(Chan, FLOAT)).tolist()).reshape(size) 
+                     for Chan in ("MATERIAL_ID.V", "Color.R", "Color.G", "Color.B")]
+
+        rgb = np.array([R, G, B])
+        rgb = np.transpose(rgb, [1, 2, 0])
+
+        rgb[rgb >= 1.0] = 1.0
+        M[M >= MAX_VALUE] = 0
+        M[M != 3] = 0
+
+        return M, rgb
+    
+    
+    def __getitem__(self, index):
+        M, rgb = self.load_exr(self.paths[index])
+
+        #nxnynz = nxnynz.astype(np.float32)
+
+        rgb *= 255.0
+        rgb = rgb.astype(np.uint8)
+        _img = cv2.cvtColor(rgb, cv2.COLOR_BGR2GRAY)
+        mean = 0
+        stddev = 50 * np.random.random(1)[0]
+        noise = np.zeros(_img.shape, np.uint8)
+        cv2.randn(noise, mean, stddev)
+        _img = cv2.add(_img, noise)
+        _img = np.stack([_img, _img, _img], axis=2)
+
+        #print('image max: ', np.amax(_img))
+
+        _label = np.stack([M, M, M])
+
+        _img_tensor = transforms.ToTensor()(_img)
+        _label_tensor = torch.from_numpy(_label.astype(np.float32))
+        #_label_tensor = torch.unsqueeze(_label_tensor, 0)
+
+
+        return _img_tensor, _label_tensor
+
+    def _activator_masks(self, images, augmenter, parents, default):
+        return False
+
 
 
 class SurfaceNormalsDataset(Dataset):
@@ -79,8 +158,27 @@ class SurfaceNormalsDataset(Dataset):
         # _img = (_img + 1) / 2
         # _img = _img.transpose(1,2,0)
         # for rgb images as input
-        _img = Image.open(image_path).convert('RGB')
-        _img = np.array(_img)
+        _img = Image.open(image_path)
+        if True:
+            _img = _img.convert('L')
+            _img = np.array(_img)
+    
+            mean = 0
+            stddev = 90 * np.random.random(1)[0]
+            #print(stddev)
+            noise = np.zeros(_img.shape, np.uint8)
+            cv2.randn(noise, mean, stddev)
+            _img = cv2.add(_img, noise)
+
+            _img = np.stack([_img, _img, _img], axis=2)
+            #print(_img.shape)
+            #plt.imshow(_img)
+            #plt.show()
+        else:
+            _img = _img.convert('RGB')
+            _img = np.array(_img)
+
+        # print('image max: ', np.amax(_img))
 
         # Open labels
         if self.labels_dir:
@@ -90,6 +188,7 @@ class SurfaceNormalsDataset(Dataset):
             # _label = np.array(_label)[..., np.newaxis]
             _label = np.zeros(mask.shape, dtype=np.uint8)
             _label[mask >= 100] = 1
+            _label = np.stack([_label, _label, _label])
 
 
         # Apply image augmentations and convert to Tensor
@@ -97,14 +196,14 @@ class SurfaceNormalsDataset(Dataset):
             det_tf = self.transform.to_deterministic()
             _img = det_tf.augment_image(_img)
             _img = np.ascontiguousarray(_img)  # To prevent errors from negative stride, as caused by fliplr()
-        if self.labels_dir:
-            _label = det_tf.augment_image(_label, hooks=ia.HooksImages(activator=self._activator_masks))
+            if self.labels_dir:
+                _label = det_tf.augment_image(_label, hooks=ia.HooksImages(activator=self._activator_masks))
 
         # Return Tensors
         _img_tensor = transforms.ToTensor()(_img)
         if self.labels_dir:
             _label_tensor = torch.from_numpy(_label.astype(np.float32))
-            _label_tensor = torch.unsqueeze(_label_tensor, 0)
+            #_label_tensor = torch.unsqueeze(_label_tensor, 0)
             # _label_tensor = transforms.ToTensor()(_label.astype(np.float))
         else:
             _label_tensor = torch.zeros((1, _img_tensor.shape[1], _img_tensor.shape[2]), dtype=torch.float32)
@@ -190,14 +289,14 @@ if __name__ == '__main__':
     augs = None  # augs_train, augs_test, None
     input_only = None  # ["gaus-blur", "grayscale", "gaus-noise", "brightness", "contrast", "hue-sat", "color-jitter"]
 
-    db_test = SurfaceNormalsDataset(
-        input_dir='data/datasets/milk-bottles/resized-files/preprocessed-rgb-imgs',
-        label_dir='data/datasets/milk-bottles/resized-files/preprocessed-camera-normals',
-        transform=augs,
-        input_only=input_only
-    )
+    db_test = SurfaceNormalsDataset(input_dir='../../data/cleargrasp-dataset-test-val/synthetic-val/stemless-plastic-champagne-glass-val/rgb-imgs',
+                                    label_dir='../../data/cleargrasp-dataset-test-val/synthetic-val/stemless-plastic-champagne-glass-val/segmentation-masks',
+                                    transform=augs,
+                                    input_only=input_only)
+    
+    db_test = MasksPhoXiEXRDataset(input_dir='../../data/our-synth')
 
-    batch_size = 16
+    batch_size = 1
     testloader = DataLoader(db_test, batch_size=batch_size, shuffle=True, num_workers=32, drop_last=True)
 
     # Show 1 Shuffled Batch of Images

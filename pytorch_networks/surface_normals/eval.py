@@ -195,7 +195,6 @@ else:
     print('third')
     model.load_state_dict(CHECKPOINT)
 
-
 #filename = os.path.join('', 'checkpoint-epoch-{:04d}.pth'.format(999))
 #if torch.cuda.device_count() > 1:
 #    model_params = model.module.state_dict()  # Saving nn.DataParallel model
@@ -220,9 +219,10 @@ else:
 if torch.cuda.device_count() > 1:
     print("Let's use", torch.cuda.device_count(), "GPUs!")
     # dim = 0 [30, xxx] -> [10, ...], [10, ...], [10, ...] on 3 GPUs
-    model = nn.DataParallel(model)
+    # model = nn.DataParallel(model)
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+device = "cpu"
 model = model.to(device)
 model.eval()
 
@@ -261,6 +261,21 @@ for key in dataloaders_dict:
         # Forward pass of the mini-batch
         inputs = inputs.to(device)
         labels = labels.to(device)
+
+        if True:
+            onnx_model_name = "normal_prediction.onnx"
+            print(inputs.shape)
+            torch.onnx.export(
+                    model,
+                    inputs,
+                    onnx_model_name,
+                    verbose=True,
+                    input_names=["input"],
+                    output_names=["output"],
+                    opset_version=11
+            )
+            print("exported")
+            break
 
         with torch.no_grad():
             normal_vectors = model(inputs)

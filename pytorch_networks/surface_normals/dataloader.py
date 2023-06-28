@@ -10,6 +10,8 @@ import glob
 import OpenEXR
 import Imath
 import array
+import matplotlib.pyplot as plt
+import cv2
 
 import torch
 import torch.nn as nn
@@ -20,20 +22,6 @@ import imgaug as ia
 import imageio
 
 from utils.utils import exr_loader
-
-from dataclasses import dataclass
-from typing import Optional, Tuple
-
-@dataclass
-class Sample:
-    color: Optional[np.ndarray] = None
-    depth: Optional[np.ndarray] = None
-    point_cloud: Optional[np.ndarray] = None
-    mat_id: Optional[np.ndarray] = None
-    object_id: Optional[np.ndarray] = None
-    shading_normal: Optional[np.ndarray] = None
-    path: Optional[str] = None
-    original_shape: Optional[Tuple[int, int]] = None
 
 MAX_VALUE = 65504
 
@@ -53,6 +41,7 @@ class SurfaceNormalsPhoXiEXRDataset(Dataset):
 
     def _create_lists_filenames(self, path):
         paths = glob.glob(path + '/**/*.exr')
+        print(paths)
         return paths 
      
 
@@ -63,35 +52,42 @@ class SurfaceNormalsPhoXiEXRDataset(Dataset):
     def load_exr(self, exr_path):
         exr = OpenEXR.InputFile(exr_path)
         dw = exr.header()['dataWindow']
-        print(exr.header())
+        #print(exr.header())
         size = ( dw.max.y - dw.min.y + 1, dw.max.x - dw.min.x + 1)
         FLOAT = Imath.PixelType(Imath.PixelType.FLOAT)
-        (X, Y, Z, R, G, B, D, M, O) = [np.array(array.array('f', exr.channel(Chan, FLOAT)).tolist()).reshape(size) 
-                     for Chan in ("POSITION.X", "POSITION.Y", "POSITION.Z", "Color.R", "Color.G", "Color.B", "Depth.V", "MATERIAL_ID.V", "OBJECT_ID.V")]
-        #xyz = np.array([X, Y, Z])
-        xyz = np.array([X, Y, Z, np.ones(size)])
-        xyz = np.reshape(xyz, [4, -1])
-        scale = np.eye(4) * 1000
-        scale[3, 3] = 1
-        xyz = scale @ xyz
-        xyz = np.reshape(xyz, [4, size[0], size[1]])
-        xyz = xyz[:3,:,:]
-        xyz = np.transpose(xyz, [1, 2, 0])
+        (NX, NY, NZ, R, G, B) = [np.array(array.array('f', exr.channel(Chan, FLOAT)).tolist()).reshape(size) 
+                     for Chan in ("NORMAL.X", "NORMAL.Y", "NORMAL.Z", "Color.R", "Color.G", "Color.B")]
+
+        nxnynz = np.array([NX, NY, NZ])
         rgb = np.array([R, G, B])
         rgb = np.transpose(rgb, [1, 2, 0])
 
         rgb[rgb >= 1.0] = 1.0
-        xyz[xyz >= MAX_VALUE] = 0
-        O[O >= MAX_VALUE] = 0
-        M[M >= MAX_VALUE] = 0
-        return xyz, rgb, D, M, O
+        nxnynz[nxnynz >= MAX_VALUE] = 0
+
+        return nxnynz, rgb
     
     
     def __getitem__(self, index):
-        xyz, rgb, depth, mat_id, obj_id = self.load_exr(self.paths[index])
+        nxnynz, rgb = self.load_exr(self.paths[index])
 
-        _img_tensor = transforms.ToTensor()(rgb)
-        _label_tensor = torch.from_numpy(depth)
+        nxnynz = nxnynz.astype(np.float32)
+
+        rgb *= 255.0
+        rgb = rgb.astype(np.uint8)
+        _img = cv2.cvtColor(rgb, cv2.COLOR_BGR2GRAY)
+        mean = 0
+        stddev = 50 * np.random.random(1)[0]
+        noise = np.zeros(_img.shape, np.uint8)
+        cv2.randn(noise, mean, stddev)
+        _img = cv2.add(_img, noise)
+        _img = np.stack([_img, _img, _img], axis=2)
+
+        print('image max: ', np.amax(_img))
+
+        _img_tensor = transforms.ToTensor()(_img)
+        _label_tensor = torch.from_numpy(nxnynz)
+        _label_tensor = nn.functional.normalize(_label_tensor, p=2, dim=0)
         _mask_tensor = torch.ones((1, _img_tensor.shape[1], _img_tensor.shape[2]), dtype=torch.float32)
 
         return _img_tensor, _label_tensor, _mask_tensor
@@ -160,8 +156,27 @@ class SurfaceNormalsDataset(Dataset):
 
         # Open input imgs
         image_path = self._datalist_input[index]
-        _img = Image.open(image_path).convert('RGB')
-        _img = np.array(_img)
+
+        _img = Image.open(image_path)
+        if True:
+            _img = _img.convert('L')
+            _img = np.array(_img)
+    
+            mean = 0
+            stddev = 90 * np.random.random(1)[0]
+            #print(stddev)
+            noise = np.zeros(_img.shape, np.uint8)
+            cv2.randn(noise, mean, stddev)
+            _img = cv2.add(_img, noise)
+
+            _img = np.stack([_img, _img, _img], axis=2)
+            #print(_img.shape)
+            #plt.imshow(_img)
+            #plt.show()
+        else:
+            _img = _img.convert('RGB')
+            _img = np.array(_img)
+
 
         # Open labels
         if self.labels_dir:
@@ -281,60 +296,53 @@ if __name__ == '__main__':
     import torchvision
 
     # Example Augmentations using imgaug
-    # imsize = 512
-    # augs_train = iaa.Sequential([
-    #     # Geometric Augs
-    #     iaa.Scale((imsize, imsize), 0), # Resize image
-    #     iaa.Fliplr(0.5),
-    #     iaa.Flipud(0.5),
-    #     iaa.Rot90((0, 4)),
-    #     # Blur and Noise
-    #     #iaa.Sometimes(0.2, iaa.GaussianBlur(sigma=(0, 1.5), name="gaus-blur")),
-    #     #iaa.Sometimes(0.1, iaa.Grayscale(alpha=(0.0, 1.0), from_colorspace="RGB", name="grayscale")),
-    #     iaa.Sometimes(0.2, iaa.AdditiveLaplaceNoise(scale=(0, 0.1*255), per_channel=True, name="gaus-noise")),
-    #     # Color, Contrast, etc.
-    #     #iaa.Sometimes(0.2, iaa.Multiply((0.75, 1.25), per_channel=0.1, name="brightness")),
-    #     iaa.Sometimes(0.2, iaa.GammaContrast((0.7, 1.3), per_channel=0.1, name="contrast")),
-    #     iaa.Sometimes(0.2, iaa.AddToHueAndSaturation((-20, 20), name="hue-sat")),
-    #     #iaa.Sometimes(0.3, iaa.Add((-20, 20), per_channel=0.5, name="color-jitter")),
-    # ])
-    # augs_test = iaa.Sequential([
-    #     # Geometric Augs
-    #     iaa.Scale((imsize, imsize), 0),
-    # ])
+    imsize = 512
+    augs_train = iaa.Sequential([
+        # Geometric Augs
+        iaa.Scale((imsize, imsize), 0), # Resize image
+        iaa.Fliplr(0.5),
+        iaa.Flipud(0.5),
+        iaa.Rot90((0, 4)),
+        # Blur and Noise
+        #iaa.Sometimes(0.2, iaa.GaussianBlur(sigma=(0, 1.5), name="gaus-blur")),
+        #iaa.Sometimes(0.1, iaa.Grayscale(alpha=(0.0, 1.0), from_colorspace="RGB", name="grayscale")),
+        iaa.Sometimes(0.2, iaa.AdditiveLaplaceNoise(scale=(0, 0.1*255), per_channel=True, name="gaus-noise")),
+        # Color, Contrast, etc.
+        #iaa.Sometimes(0.2, iaa.Multiply((0.75, 1.25), per_channel=0.1, name="brightness")),
+        iaa.Sometimes(0.2, iaa.GammaContrast((0.7, 1.3), per_channel=0.1, name="contrast")),
+        iaa.Sometimes(0.2, iaa.AddToHueAndSaturation((-20, 20), name="hue-sat")),
+        #iaa.Sometimes(0.3, iaa.Add((-20, 20), per_channel=0.5, name="color-jitter")),
+    ])
+    augs_test = iaa.Sequential([
+        # Geometric Augs
+        iaa.Scale((imsize, imsize), 0),
+    ])
 
-    # augs = None  # augs_train
-    # input_only = None  # ["gaus-blur", "grayscale", "gaus-noise", "brightness", "contrast", "hue-sat", "color-jitter"]
+    augs = None  # augs_train
+    input_only = None  # ["gaus-blur", "grayscale", "gaus-noise", "brightness", "contrast", "hue-sat", "color-jitter"]
 
-    # db_test = SurfaceNormalsDataset(input_dir='data/datasets/milk-bottles/resized-files/preprocessed-rgb-imgs',
-    #                                 label_dir='data/datasets/milk-bottles/resized-files/preprocessed-camera-normals',
-    #                                 transform=augs,
-    #                                 input_only=input_only)
+    #db_test = SurfaceNormalsDataset(input_dir='../../data/cleargrasp-dataset-test-val/synthetic-val/stemless-plastic-champagne-glass-val/rgb-imgs',
+    #                                label_dir='../../data/cleargrasp-dataset-test-val/synthetic-val/stemless-plastic-champagne-glass-val/camera-normals',
+    #                                transform=augs,
+    #                                input_only=input_only)
+    db_test = SurfaceNormalsPhoXiEXRDataset(input_dir='../../data/our-synth')
 
-    # batch_size = 16
-    # testloader = DataLoader(db_test, batch_size=batch_size, shuffle=True, num_workers=32, drop_last=True)
+    batch_size = 1
+    testloader = DataLoader(db_test, batch_size=batch_size, shuffle=True, num_workers=32, drop_last=True)
 
-    # # Show 1 Shuffled Batch of Images
-    # for ii, batch in enumerate(testloader):
-    #     # Get Batch
-    #     img, label = batch
-    #     print('image shape, type: ', img.shape, img.dtype)
-    #     print('label shape, type: ', label.shape, label.dtype)
+    # Show 1 Shuffled Batch of Images
+    for ii, batch in enumerate(testloader):
+        # Get Batch
+        img, label, mask = batch
+        print('image shape, type: ', img.shape, img.dtype)
+        print('label shape, type: ', label.shape, label.dtype)
 
-    #     # Show Batch
-    #     sample = torch.cat((img, label), 2)
-    #     im_vis = torchvision.utils.make_grid(sample, nrow=batch_size // 4, padding=2, normalize=True, scale_each=True)
-    #     plt.imshow(im_vis.numpy().transpose(1, 2, 0))
-    #     plt.show()
+        # Show Batch
+        sample = torch.cat((img, label), 2)
+        im_vis = torchvision.utils.make_grid(sample, nrow=batch_size // 4, padding=2, normalize=True, scale_each=True)
+        plt.imshow(im_vis.numpy().transpose(1, 2, 0))
+        plt.show()
 
-    #     break
+        break
 
-    data_path = "data"
-    dataset = SurfaceNormalsPhoXiEXRDataset(data_path)
-    sample = dataset[0]
-
-    print(np.unique(sample.object_id))
-    print(np.amax(sample.object_id))
-    plt.imshow(sample.object_id)
-    plt.show()
 
